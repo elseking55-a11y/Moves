@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-const PUBLIC_WS = "wss://api.derivws.com/trading/v1/options/ws/public";
+const PUBLIC_WS_ENDPOINTS = [
+  "wss://api.derivws.com/trading/v1/options/ws/public",
+  "wss://ws.binaryws.com/websockets/v3"
+];
 const DEFAULT_SYMBOL = "1HZ100V";
 const MARKET_OPTIONS = [
   ["1HZ100V", "Volatility 100 (1s)"],
@@ -79,6 +82,7 @@ export default function App() {
   const wsRef = useRef(null);
   const reconnectRef = useRef(null);
   const manualCloseRef = useRef(false);
+  const endpointRef = useRef(0);
 
   const analysis = useMemo(() => analyse(ticks, windowSize, strategy, targetDigit),
     [ticks, windowSize, strategy, targetDigit]);
@@ -105,7 +109,8 @@ export default function App() {
     setConnecting(true);
     setStatus("Connecting");
     setMessage("");
-    const socket = new WebSocket(PUBLIC_WS);
+    const endpoint = PUBLIC_WS_ENDPOINTS[endpointRef.current];
+    const socket = new WebSocket(endpoint);
     wsRef.current = socket;
 
     socket.onopen = () => {
@@ -152,9 +157,18 @@ export default function App() {
     };
     socket.onclose = () => {
       setConnecting(false);
-      setStatus("Disconnected");
       if (!manualCloseRef.current) {
-        reconnectRef.current = setTimeout(() => connectPublic(true), 2500);
+        if (endpointRef.current < PUBLIC_WS_ENDPOINTS.length - 1) {
+          endpointRef.current += 1;
+          setMessage("Primary Deriv feed unavailable. Switching to the compatible public feed...");
+          reconnectRef.current = setTimeout(() => connectPublic(true), 500);
+        } else {
+          endpointRef.current = 0;
+          setStatus("Disconnected");
+          reconnectRef.current = setTimeout(() => connectPublic(true), 2500);
+        }
+      } else {
+        setStatus("Disconnected");
       }
     };
   };
