@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-const PUBLIC_WS = "wss://ws.binaryws.com/websockets/v3";
+const PUBLIC_WS = "wss://api.derivws.com/trading/v1/options/ws/public";
 const DEFAULT_SYMBOL = "1HZ100V";
 const MARKET_OPTIONS = [
   ["1HZ100V", "Volatility 100 (1s)"],
@@ -112,9 +112,13 @@ export default function App() {
       setConnecting(false);
       setStatus("Live");
       socket.send(JSON.stringify({
-        ticks_history: symbol, count: 1000, end: "latest", style: "ticks", req_id: 11
+        active_symbols: "brief",
+        product_type: "basic",
+        req_id: 1
       }));
-      subscribe(socket, symbol);
+      socket.send(JSON.stringify({
+        ticks_history: symbol, count: 1000, end: "latest", style: "ticks", subscribe: 1, req_id: 11
+      }));
     };
 
     socket.onmessage = (event) => {
@@ -123,6 +127,12 @@ export default function App() {
         if (data.error) {
           setMessage(data.error.message || "Deriv returned an error.");
           return;
+        }
+        if (data.msg_type === "active_symbols") {
+          const symbols = data.active_symbols || [];
+          if (!symbols.some((item) => item.symbol === symbol)) {
+            setMessage("Selected Deriv market is not currently available.");
+          }
         }
         if (data.msg_type === "history") {
           const prices = data.history?.prices || [];
@@ -157,9 +167,8 @@ export default function App() {
   useEffect(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ forget_all: "ticks" }));
-      subscribe(wsRef.current, symbol);
       wsRef.current.send(JSON.stringify({
-        ticks_history: symbol, count: 1000, end: "latest", style: "ticks", req_id: Date.now()
+        ticks_history: symbol, count: 1000, end: "latest", style: "ticks", subscribe: 1, req_id: Date.now()
       }));
     }
   }, [symbol]);
