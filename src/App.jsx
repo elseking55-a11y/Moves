@@ -77,11 +77,16 @@ export default function App() {
   const [minConfidence, setMinConfidence] = useState(55);
   const [message, setMessage] = useState("");
   const wsRef = useRef(null);
+  const reconnectRef = useRef(null);
+  const manualCloseRef = useRef(false);
 
   const analysis = useMemo(() => analyse(ticks, windowSize, strategy, targetDigit),
     [ticks, windowSize, strategy, targetDigit]);
 
   const closeWs = () => {
+    manualCloseRef.current = true;
+    if (reconnectRef.current) clearTimeout(reconnectRef.current);
+    reconnectRef.current = null;
     try { wsRef.current?.close(); } catch {}
     wsRef.current = null;
   };
@@ -90,8 +95,13 @@ export default function App() {
     socket.send(JSON.stringify({ ticks: selectedSymbol, subscribe: 1, req_id: 20 }));
   };
 
-  const connectPublic = () => {
-    closeWs();
+  const connectPublic = (isReconnect = false) => {
+    manualCloseRef.current = false;
+    if (!isReconnect) {
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      try { wsRef.current?.close(); } catch {}
+      wsRef.current = null;
+    }
     setConnecting(true);
     setStatus("Connecting");
     setMessage("");
@@ -130,7 +140,13 @@ export default function App() {
       setConnecting(false);
       setStatus("Connection error");
     };
-    socket.onclose = () => setStatus("Disconnected");
+    socket.onclose = () => {
+      setConnecting(false);
+      setStatus("Disconnected");
+      if (!manualCloseRef.current) {
+        reconnectRef.current = setTimeout(() => connectPublic(true), 2500);
+      }
+    };
   };
 
   useEffect(() => {
@@ -173,7 +189,7 @@ export default function App() {
           <p>No account or login is required to view public market data.</p>
         </div>
         <button className="primary-button" onClick={connectPublic} disabled={connecting}>
-          {connecting ? "Connecting" : "Enter analysis"}
+          {connecting ? "Connecting" : status === "Live" ? "Refresh live feed" : "Enter analysis"}
         </button>
       </section>
 
@@ -276,7 +292,7 @@ export default function App() {
         </div>
       </section>
 
-      <footer>ELISY254 · Public Deriv market analysis</footer>
+      <footer>ELISY254 · Live public Deriv market analysis · Automatic reconnect enabled</footer>
     </main>
   );
 }
